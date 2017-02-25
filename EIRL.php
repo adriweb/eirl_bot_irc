@@ -56,18 +56,14 @@ class EIRL extends BaseModule
 
                 $addr = hexdec($addr);
 
-                if (!isset($this->fromAddr[$addr]))
-                {
-                    $this->fromAddr[$addr] = [];
-                }
-                array_push($this->fromAddr[$addr], $name);
-                $this->fromName[$name] = $addr;
+                $this->fromAddr[$addr][] = $name;
+                $this->fromName[$name]   = $addr;
             }
             fclose($handle);
         }
         else
         {
-            die("Could not open ti84pce.lab");
+            die('Could not open ti84pce.lab');
         }
     }
 
@@ -96,9 +92,9 @@ class EIRL extends BaseModule
 
         $addr = strtoupper($addr);
 
-        if ((substr($addr, 0, 1) === '$') || (substr($addr, 0, 2) === '0X') || (substr($addr, -1, 1) === 'h'))
+        if (($addr[0] === '$') || (substr($addr, 0, 2) === '0X') || (substr($addr, -1, 1) === 'h'))
         {
-            if (strlen($addr) > 1 && substr($addr, 0, 1) === '$')
+            if (strlen($addr) > 1 && $addr[0] === '$')
             {
                 return hexdec(substr($addr, 1));
             }
@@ -136,7 +132,7 @@ class EIRL extends BaseModule
             }
             if ($okInput === null)
             {
-                $this->writeMessage($object, "Wut?");
+                $this->writeMessage($object, 'Wut?');
                 return;
             }
 
@@ -149,41 +145,54 @@ class EIRL extends BaseModule
 
             if ($isAnAddr)
             {
+                if ($okInput > 0xFFFFFF)
+                {
+                    $this->writeMessage($object, "Wut? That's too big.");
+                    return;
+                }
+
                 if (isset($this->fromAddr[$okInput]))
                 {
                     $thing = $this->fromAddr[$okInput];
                     $multiple = count($thing) > 1;
-                    $this->writeMessage($object, $betterInput . ' is ' . ( $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, "...")) : (IRC_FONT_BOLD . $thing[0]) )
-                                                                       . IRC_FONT_RESET );
-                } else {
+                    $this->writeMessage($object, $betterInput . ' is ' . ( $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]) ) . IRC_FONT_RESET );
+                }
+                else
+                {
+                    $bestAddrBefore = 0.5;
+                    $bestAddrAfter  = 0xFFFFFF+1;
+                    foreach ($this->fromAddr as $addr => $names)
+                    {
+                        if ($addr < $okInput)
+                        {
+                            if ($okInput - $addr < $okInput - $bestAddrBefore)
+                            {
+                                $bestAddrBefore = $addr;
+                            }
+                        } else {
+                            if ($okInput + $addr < $okInput + $bestAddrAfter)
+                            {
+                                $bestAddrAfter = $addr;
+                            }
+                        }
+                    }
+
                     $msgBefore = $msgAfter = '';
-                    $errBefore = $errAfter = false;
-                    $offsetBefore = $offsetAfter = 1;
-                    while (!isset($this->fromAddr[$okInput - $offsetBefore]))
+                    if ($bestAddrBefore !== 0.5)
                     {
-                        $offsetBefore++;
-                        if ($okInput - $offsetBefore < 1)
-                        {
-                            $errBefore = true;
-                            break;
-                        }
+                        $thing = $this->fromAddr[$bestAddrBefore];
+                        $multiple = count($thing) > 1;
+                        $thing = $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]);
+                        $offsetBefore = $okInput - $bestAddrBefore;
+                        $msgBefore = $thing . '+' . ($offsetBefore > 0xF ? '0x' : '') . dechex($offsetBefore) . IRC_FONT_RESET;
                     }
-                    while (!isset($this->fromAddr[$okInput + $offsetAfter]))
+                    if ($bestAddrAfter !== 0xFFFFFF+1)
                     {
-                        $offsetAfter++;
-                        if ($okInput + $offsetAfter > 0xFFFFFF)
-                        {
-                            $errAfter = true;
-                            break;
-                        }
-                    }
-                    if (!$errBefore)
-                    {
-                        $msgBefore = IRC_FONT_BOLD . $this->fromAddr[$okInput - $offsetBefore][0] . '+' . ($offsetBefore > 0xF ? '0x' : '') . dechex($offsetBefore) . IRC_FONT_RESET;
-                    }
-                    if (!$errAfter)
-                    {
-                        $msgAfter = IRC_FONT_BOLD . $this->fromAddr[$okInput + $offsetAfter][0] . '-' . ($offsetAfter > 0xF ? '0x' : '') . dechex($offsetAfter) . IRC_FONT_RESET;
+                        $thing = $this->fromAddr[$bestAddrAfter];
+                        $multiple = count($thing) > 1;
+                        $thing = $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]);
+                        $offsetAfter = $bestAddrAfter - $okInput;
+                        $msgAfter  = $thing . '-' . ($offsetAfter > 0xF ? '0x' : '')  . dechex($offsetAfter)  . IRC_FONT_RESET;
                     }
                     if ($msgBefore !== '' || $msgAfter !== '')
                     {
@@ -208,13 +217,13 @@ class EIRL extends BaseModule
                 {
                     $this->writeMessage($object, $betterInput . ' is ' . IRC_FONT_BOLD . '$' . strtoupper(dechex($this->fromName[$okInput])) . IRC_FONT_RESET);
                 } else {
-                    $this->writeMessage($object, "Wut? idk.");
+                    $this->writeMessage($object, 'Wut? idk.');
                     return;
                 }
             }
 
         } catch (\Exception $e) {
-            $this->writeMessage($object, "Oops, something went wrong (exception caught) :(");
+            $this->writeMessage($object, 'Oops, something went wrong (exception caught) :(');
         }
     }
 
