@@ -165,12 +165,12 @@ class EIRL extends BaseModule
                     {
                         if ($addr < $okInput)
                         {
-                            if ($okInput - $addr < $okInput - $bestAddrBefore)
+                            if ($bestAddrBefore < $addr)
                             {
                                 $bestAddrBefore = $addr;
                             }
                         } else {
-                            if ($okInput + $addr < $okInput + $bestAddrAfter)
+                            if ($bestAddrAfter > $addr)
                             {
                                 $bestAddrAfter = $addr;
                             }
