@@ -76,6 +76,34 @@ class EIRL extends BaseModule
 		{
 			$this->getEventEmitter()->on('irc.command.' . $func, [$this, 'reverse_lookup']);
 		}
+
+        $this->getEventEmitter()->on('irc.command.ascii', [$this, 'ascii_lookup']);
+    }
+
+    /* adapted from http://stackoverflow.com/a/27444149/378298 */
+    // code point to UTF-8 string
+    private function unichr($i) {
+        return iconv('UCS-4LE', 'UTF-8', pack('V', $i));
+    }
+    // UTF-8 string to code point
+    private function uniord($s) {
+        return json_encode(array_values(unpack('V*', iconv('UTF-8', 'UCS-4LE', $s))));
+    }
+
+    public function ascii_lookup($command, $params, IrcDataObject $object)
+    {
+        try
+        {
+            $input = trim(explode(' ', $params)[0]); // trim first word.
+            if (empty($input)) {
+                $this->writeMessage($object, 'Give me a char, a string, or a number');
+                return;
+            }
+            $output = is_numeric($input) ? $this->unichr((int)$input) : (string)$this->uniord((string)$input);
+            $this->writeMessage($object, empty($output) ? 'Wut? idk.' : $output);
+        } catch (\Exception $e) {
+            $this->writeMessage($object, 'Wut? (Exception caught).');
+        }
     }
 
 
