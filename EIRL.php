@@ -1,21 +1,21 @@
 <?php
 
 /*
-	WildPHP - a modular and easily extendable IRC bot written in PHP
-	Copyright (C) 2015 WildPHP
+    WildPHP - a modular and easily extendable IRC bot written in PHP
+    Copyright (C) 2015 WildPHP
 
-	This program is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-	You should have received a copy of the GNU General Public License
-	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 namespace WildPHP\Modules\EIRL;
@@ -36,11 +36,22 @@ define('IRC_FONT_RESET',  "\x0F");
 
 
 use WildPHP\BaseModule;
+use WildPHP\CoreModules\Connection\Connection;
 use WildPHP\CoreModules\Connection\IrcDataObject;
+use WildPHP\Validation;
+
 
 // eZ80 Include Reverse Lookup
 class EIRL extends BaseModule
 {
+
+    /**
+     * @var IrcDataObject
+     */
+    private $irc_obj;
+
+    private $lastTime = 0;
+
     private $fromAddr = [];
     private $fromName = [];
 
@@ -67,17 +78,35 @@ class EIRL extends BaseModule
         }
     }
 
-	public function setup()
-	{
+    public function setup()
+    {
         $this->initEquates();
 
-        $functions = [ 'rl', 'whatis', 'whats', 'watis', 'wats' ];
-		foreach ($functions as $func)
-		{
-			$this->getEventEmitter()->on('irc.command.' . $func, [$this, 'reverse_lookup']);
-		}
+        $functions = [ 'rl', 'ascii' ];
+        foreach ($functions as $func)
+        {
+            $this->getEventEmitter()->on('irc.command.' . $func, [$this, 'funcDispatcher']);
+        }
+    }
 
-        $this->getEventEmitter()->on('irc.command.ascii', [$this, 'ascii_lookup']);
+    public function funcDispatcher($command, $params, IrcDataObject $object)
+    {
+        $this->irc_obj = $object;
+
+        if ($this->lastTime > time() - 2) {
+            return;
+        }
+
+        $methodName = 'handler_' . $command;
+        if (method_exists($this, $methodName)) {
+            $this->lastTime = time();
+            try {
+                $this->$methodName($params);
+            } catch (\Exception $e) {
+                $this->writeMessage('Oops, something went wrong (exception caught) :(');
+                echo $e->getMessage() . "\n";
+            }
+        }
     }
 
     /* adapted from http://stackoverflow.com/a/27444149/378298 */
@@ -90,19 +119,19 @@ class EIRL extends BaseModule
         return json_encode(array_values(unpack('V*', iconv('UTF-8', 'UCS-4LE', $s))));
     }
 
-    public function ascii_lookup($command, $params, IrcDataObject $object)
+    public function handler_ascii($params)
     {
         try
         {
             $input = trim(explode(' ', $params)[0]); // trim first word.
             if (empty($input)) {
-                $this->writeMessage($object, 'Give me a char, a string, or a number');
+                $this->writeMessage('Give me a char, a string, or a number');
                 return;
             }
             $output = is_numeric($input) ? $this->unichr((int)$input) : (string)$this->uniord((string)$input);
-            $this->writeMessage($object, empty($output) ? 'Wut? idk.' : $output);
+            $this->writeMessage(empty($output) ? 'Wut? idk.' : $output);
         } catch (\Exception $e) {
-            $this->writeMessage($object, 'Wut? (Exception caught).');
+            $this->writeMessage('Wut? (Exception caught).');
         }
     }
 
@@ -142,14 +171,14 @@ class EIRL extends BaseModule
         return null;
     }
 
-    public function reverse_lookup($command, $params, IrcDataObject $object)
+    public function handler_rl($params)
     {
         try
         {
             $trimmedInput = trim(explode(' ', $params)[0]); // trim first word.
 
             $isAnAddr = (1 === preg_match('/^(0x|\$)?[0-9a-f]+h?$/i', $trimmedInput));
-            $isHexAddr = ($isAnAddr && (1 === preg_match('/[A-F]/', $trimmedInput)));
+            $isHexAddr = ($isAnAddr && (1 === preg_match('/[A-F]/i', $trimmedInput)));
 
             $okInput = $trimmedInput;
             $hexAddr = '';
@@ -158,9 +187,9 @@ class EIRL extends BaseModule
             {
                 $okInput = $this->makeDecimalAddress($trimmedInput);
             }
-            if ($okInput === null)
+            if (empty($okInput))
             {
-                $this->writeMessage($object, 'Wut?');
+                $this->writeMessage('Wut?');
                 return;
             }
 
@@ -175,7 +204,7 @@ class EIRL extends BaseModule
             {
                 if ($okInput > 0xFFFFFF)
                 {
-                    $this->writeMessage($object, "Wut? That's too big.");
+                    $this->writeMessage("Wut? That's too big.");
                     return;
                 }
 
@@ -183,7 +212,7 @@ class EIRL extends BaseModule
                 {
                     $thing = $this->fromAddr[$okInput];
                     $multiple = count($thing) > 1;
-                    $this->writeMessage($object, $betterInput . ' is ' . ( $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]) ) . IRC_FONT_RESET );
+                    $this->writeMessage($betterInput . ' is ' . ( $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]) ) . IRC_FONT_RESET );
                 }
                 else
                 {
@@ -229,36 +258,92 @@ class EIRL extends BaseModule
                         {
                             $msg .= $msgBefore;
                             if ($msgAfter !== '') {
-                                $msg .= ' or ';
+                                $msg .= ' or ' . $msgAfter;
                             }
-                        }
-                        if ($msgAfter !== '') {
+                        } else {
                             $msg .= $msgAfter;
                         }
-                        $this->writeMessage($object, $msg);
+                        $this->writeMessage($msg);
                     } else {
-                        $this->writeMessage($object, "Wut? Couldn't find stuff with offsets. That's not normal...");
+                        $this->writeMessage("Wut? Couldn't find stuff with offsets. That's not normal...");
                     }
                 }
             } else {
                 if (isset($this->fromName[$okInput]))
                 {
-                    $this->writeMessage($object, $betterInput . ' is ' . IRC_FONT_BOLD . '$' . strtoupper(dechex($this->fromName[$okInput])) . IRC_FONT_RESET);
+                    $this->writeMessage($betterInput . ' is ' . IRC_FONT_BOLD . '$' . strtoupper(dechex($this->fromName[$okInput])) . IRC_FONT_RESET);
                 } else {
-                    $this->writeMessage($object, 'Wut? idk.');
+                    // Loop to check lowercase version
+                    foreach ($this->fromName as $name => &$addr)
+                    {
+                        if (strtolower($name) === strtolower($okInput))
+                        {
+                            $this->writeMessage(IRC_FONT_ORANGE . $name . IRC_FONT_RESET . ' is ' . IRC_FONT_BOLD . '$' . strtoupper(dechex($addr)) . IRC_FONT_RESET . ' (different name case!)');
+                            return;
+                        }
+                    }
+                    unset($addr);
+
+                    // If not found, look for the closest ones
+                    $matches = [];
+                    foreach ($this->fromName as $name => $addr) {
+                        $matches[] = [ levenshtein($okInput, $name), $name, $addr ];
+                    }
+                    if (!empty($matches))
+                    {
+                        usort($matches, function($a, $b){ return $a[0] - $b[0]; });
+                        $matches = array_slice($matches, 0, 3);
+
+                        $str = '';
+                        foreach ($matches as $match) {
+                            $str .= IRC_FONT_ORANGE . $match[1] . IRC_FONT_RESET . ' == ' . IRC_FONT_BOLD . '$' . strtoupper(dechex($match[2])) . IRC_FONT_RESET . ', ';
+                        }
+                        $str = trim($str, ', ');
+
+                        $this->writeMessage("Wut? idk but the 3 closest matches are: {$str}.");
+                    } else {
+                        // Shouldn't happen
+                        $this->writeMessage('Wut? idk.');
+                    }
+
                     return;
                 }
             }
 
         } catch (\Exception $e) {
-            $this->writeMessage($object, 'Oops, something went wrong (exception caught) :(');
+            $this->writeMessage('Oops, something went wrong (exception caught) :(');
         }
     }
 
-    private function writeMessage(IrcDataObject $object, $msg)
+    /********************************************/
+
+    private function writeMessage($msg)
     {
-        $channel = $object->getTargets()[0];
-        $connection = $this->getModule('Connection');
+        $channel = $this->irc_obj->getTargets()[0];
+        $connection = $this->getModule('Connection'); /** @var Connection $connection */
         $connection->write($connection->getGenerator()->ircPrivmsg($channel, $msg));
     }
+
+    private function writeResults($results, $limit = 3)
+    {
+        $countResults = count($results);
+
+        $stopCount = 0;
+        if ($countResults > 0)
+        {
+            foreach ($results as $result)
+            {
+                $msg = $result;
+
+                $this->writeMessage($msg);
+
+                $stopCount++;
+                if ($stopCount >= $limit)
+                    return;
+            }
+        } else {
+            $this->writeMessage('Nothing to output :(');
+        }
+    }
 }
+
