@@ -178,7 +178,6 @@ class EIRL extends BaseModule
             $trimmedInput = trim(explode(' ', $params)[0]); // trim first word.
 
             $isAnAddr = (1 === preg_match('/^(0x|\$)?[0-9a-f]+h?$/i', $trimmedInput));
-            $isHexAddr = ($isAnAddr && (1 === preg_match('/[A-F]/i', $trimmedInput)));
 
             $okInput = $trimmedInput;
             $hexAddr = '';
@@ -198,8 +197,7 @@ class EIRL extends BaseModule
                 $hexAddr = '$' . strtoupper(dechex($okInput));
             }
 
-            $betterInput = IRC_FONT_ORANGE . $trimmedInput . IRC_FONT_RESET . (($isAnAddr && !$isHexAddr && strlen($hexAddr) > 2) ? " (== {$hexAddr})" : '');
-
+            $betterInput = IRC_FONT_ORANGE . $trimmedInput . IRC_FONT_RESET . (($isAnAddr && $trimmedInput !== $hexAddr) ? " (== {$hexAddr})" : '');
             if ($isAnAddr)
             {
                 if ($okInput > 0xFFFFFF)
