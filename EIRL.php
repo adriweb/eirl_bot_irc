@@ -55,6 +55,9 @@ class EIRL extends BaseModule
     private $fromAddr = [];
     private $fromName = [];
 
+    private $removeColors = false;
+
+
     private function initEquates()
     {
         $handle = fopen(__DIR__ . '/ti84pce.lab', 'r');
@@ -96,6 +99,8 @@ class EIRL extends BaseModule
         if ($this->lastTime > time() - 2) {
             return;
         }
+
+        $this->removeColors = (strpos($object->getTargets()[0] /* channel */, 'cemetech') !== false);
 
         $methodName = 'handler_' . $command;
         if (method_exists($this, $methodName)) {
@@ -198,6 +203,7 @@ class EIRL extends BaseModule
             }
 
             $betterInput = IRC_FONT_ORANGE . $trimmedInput . IRC_FONT_RESET . (($isAnAddr && $trimmedInput !== $hexAddr) ? " (== {$hexAddr})" : '');
+
             if ($isAnAddr)
             {
                 if ($okInput > 0xFFFFFF)
@@ -239,7 +245,7 @@ class EIRL extends BaseModule
                         $multiple = count($thing) > 1;
                         $thing = $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]);
                         $offsetBefore = $okInput - $bestAddrBefore;
-                        $msgBefore = $thing . '+' . ($offsetBefore > 0xF ? '0x' : '') . dechex($offsetBefore) . IRC_FONT_RESET;
+                        $msgBefore = sprintf('%s+0x%02X', $thing, $offsetBefore) . IRC_FONT_RESET;
                     }
                     if ($bestAddrAfter !== 0xFFFFFF+1)
                     {
@@ -247,7 +253,7 @@ class EIRL extends BaseModule
                         $multiple = count($thing) > 1;
                         $thing = $multiple ? ('one of ' . IRC_FONT_BOLD . mb_strimwidth(json_encode($thing), 0, 250, '...')) : (IRC_FONT_BOLD . $thing[0]);
                         $offsetAfter = $bestAddrAfter - $okInput;
-                        $msgAfter  = $thing . '-' . ($offsetAfter > 0xF ? '0x' : '')  . dechex($offsetAfter)  . IRC_FONT_RESET;
+                        $msgAfter = sprintf('%s-0x%02X', $thing, $offsetAfter) . IRC_FONT_RESET;
                     }
                     if ($msgBefore !== '' || $msgAfter !== '')
                     {
@@ -317,6 +323,10 @@ class EIRL extends BaseModule
 
     private function writeMessage($msg)
     {
+        if ($this->removeColors) {
+            $msg = preg_replace('/\x03\d{0,2}(,\d{0,2}|\x02\x02)?/', '', $msg);
+            $msg = preg_replace('/(\x02|\x1D|\x1F|\x0F)/', '', $msg);
+        }
         $channel = $this->irc_obj->getTargets()[0];
         $connection = $this->getModule('Connection'); /** @var Connection $connection */
         $connection->write($connection->getGenerator()->ircPrivmsg($channel, $msg));
@@ -344,4 +354,5 @@ class EIRL extends BaseModule
         }
     }
 }
+
 
