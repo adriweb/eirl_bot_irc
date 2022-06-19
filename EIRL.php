@@ -191,7 +191,7 @@ class EIRL extends BaseModule
             {
                 $okInput = $this->makeDecimalAddress($trimmedInput);
             }
-            if (empty($okInput))
+            if (empty($okInput) && $okInput != 0) // not !== on purpose :D
             {
                 $this->writeMessage('Wut?');
                 return;
